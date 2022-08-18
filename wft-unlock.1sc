@@ -1,0 +1,61 @@
+//void SetCursorPos( int64 pos )
+//void StatusMessage( const char format[] [, argument, ... ] )
+//void Warning( const char format[] [, argument, ... ] )
+
+
+//int FPrintf( int fileNum, char format[], ... )
+//void InsertBytes( int64 start, int64 size, uchar value=0 )
+//void OverwriteBytes( int64 start, int64 size, uchar value=0 )
+//void WriteBytes( const uchar buffer[], int64 pos, int n )
+
+//exists 
+uint64 i,j,k,l;
+uint32 FaceCount, IndexCount, VertexCount;
+for(i=0;exists(SystemMemData.Drawable.ModelCollections.ModelCollection[i]);i++) {
+    for(j=0;exists(SystemMemData.Drawable.ModelCollections.ModelCollection[i].Models.Model[j]);j++) {
+        for(k=0;exists(SystemMemData.Drawable.ModelCollections.ModelCollection[i].Models.Model[j].Geometries.Geometries.Geometry[k]);k++) {
+            FaceCount = SystemMemData.Drawable.ModelCollections.ModelCollection[i].Models.Model[j].Geometries.Geometries.Geometry[k].FaceCount;
+            if ( FaceCount == 0) {// && i == 1) { //skip low lod
+                //Fix VertexCount, IndexCount, FaceCount
+                VertexCount = SystemMemData.Drawable.ModelCollections.ModelCollection[i].Models.Model[j].Geometries.Geometries.Geometry[k].VertexBuffer.VertexCount;
+                IndexCount =  SystemMemData.Drawable.ModelCollections.ModelCollection[i].Models.Model[j].Geometries.Geometries.Geometry[k].IndexBuffer.IndexCount;
+                FaceCount = IndexCount/3;
+                //write to file
+                SystemMemData.Drawable.ModelCollections.ModelCollection[i].Models.Model[j].Geometries.Geometries.Geometry[k].VertexCount=VertexCount;
+                SystemMemData.Drawable.ModelCollections.ModelCollection[i].Models.Model[j].Geometries.Geometries.Geometry[k].IndexCount=VertexCount;
+                SystemMemData.Drawable.ModelCollections.ModelCollection[i].Models.Model[j].Geometries.Geometries.Geometry[k].FaceCount=FaceCount;
+                Printf( "Geometry[%d][%d][%d], FaceCount:=>%d, VertexCount:=>%d, Fixed\n", i,j,k, FaceCount, VertexCount);
+            } else {
+                Printf( "Geometry[%d][%d][%d], FaceCount:%d, OK\n", i,j,k, FaceCount);
+            }
+        }
+    }
+}
+for(l=0;exists(SystemMemData.FragTypeChilds.Children[l]);l++) {
+    for(i=0;exists(SystemMemData.FragTypeChilds.Children[l].Drawable.ModelCollections.ModelCollection[i]);i++) {
+        for(j=0;exists(SystemMemData.FragTypeChilds.Children[l].Drawable.ModelCollections.ModelCollection[i].Models.Model[j]);j++) {
+            for(k=0;exists(SystemMemData.FragTypeChilds.Children[l].Drawable.ModelCollections.ModelCollection[i].Models.Model[j].Geometries.Geometries.Geometry[k]);k++) {
+                FaceCount = SystemMemData.FragTypeChilds.Children[l].Drawable.ModelCollections.ModelCollection[i].Models.Model[j].Geometries.Geometries.Geometry[k].FaceCount;
+                if ( FaceCount == 0) {// && i == 1) {
+                    //Fix VertexCount, IndexCount, FaceCount
+                    VertexCount = SystemMemData.FragTypeChilds.Children[l].Drawable.ModelCollections.ModelCollection[i].Models.Model[j].Geometries.Geometries.Geometry[k].VertexBuffer.VertexCount;
+                    IndexCount =  SystemMemData.FragTypeChilds.Children[l].Drawable.ModelCollections.ModelCollection[i].Models.Model[j].Geometries.Geometries.Geometry[k].IndexBuffer.IndexCount;
+                    FaceCount = IndexCount/3;
+                    //write to file
+                    SystemMemData.FragTypeChilds.Children[l].Drawable.ModelCollections.ModelCollection[i].Models.Model[j].Geometries.Geometries.Geometry[k].VertexCount=VertexCount;
+                    SystemMemData.FragTypeChilds.Children[l].Drawable.ModelCollections.ModelCollection[i].Models.Model[j].Geometries.Geometries.Geometry[k].IndexCount=VertexCount;
+                    SystemMemData.FragTypeChilds.Children[l].Drawable.ModelCollections.ModelCollection[i].Models.Model[j].Geometries.Geometries.Geometry[k].FaceCount=FaceCount;
+                    Printf( "Child[%d], Geometry[%d][%d][%d], FaceCount:=>%d, VertexCount:=>%d, Fixed\n", l, i,j,k, FaceCount, VertexCount);
+                } else {
+                    Printf( "Child[%d], Geometry[%d][%d][%d], FaceCount:%d, OK\n", l, i,j,k, FaceCount);
+                }
+            }
+        }
+    }
+}
+
+DWORD ZM2LockId = SystemMemData.ZM2LockId;
+if (ZM2LockId == 0x3F806F48) {
+    SystemMemData.ZM2LockId = 0;
+    Printf( "ZModeler 2 LockId found, removed.");
+}

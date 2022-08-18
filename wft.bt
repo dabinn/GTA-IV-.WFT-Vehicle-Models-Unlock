@@ -1,0 +1,742 @@
+//--------------------------------------
+//--- 010 Editor v6.0.3 Binary Template
+//
+// File:
+// Author:
+// Revision:
+// Purpose:
+//--------------------------------------
+LittleEndian();
+local int i;
+typedef struct {
+    //should be 0x05435352, if 0x52534305 = bigEndian, swap is needed
+    uint32 Magic <format=hex>;
+    enum <uint32>  { 
+        TextureXBOX = 0x7, // xtd
+        ModelXBOX = 0x6D, // xdr
+        Generic = 0x01, // xhm / xad (Generic files as rsc?)
+        Bounds = 0x20, // xbd, wbd
+        Particles = 0x24, // xpfl
+        Particles2 = 0x1B, // xpfl
+        
+        Texture = 0x8, // wtd
+        Model = 0x6E, // wdr
+        ModelFrag = 0x70, //wft
+    } ResourceType <format=hex>; 
+    struct {
+        uint32 SystemMemSize : 11;
+        uint32 SystemMemSizeShift : 4;
+        uint32 GraphicsMemSize : 11;
+        uint32 GraphicsMemSizeShift  : 4;
+        uint32 Unknown  : 2;
+    } flags <format=binary>;
+    enum <uint16> {
+        LZX = 0xF505,
+        Deflate = 0xDA78,
+    } CompressionType <format=hex>;
+} header;
+header Header;
+
+//--------------------------------------------------------------------//
+local uint64 Begin;
+local uint64 BFMPos[50];
+local uint32 BFMIdx = 0;
+local uint32 BFMIdxMax = 0;
+
+int64 BFSeek(int64 pos) {
+    return FSeek( pos + Begin);
+}
+int64 BFMS() {
+    BFMPos[BFMIdx] = FTell();
+    BFMIdx++;
+    if (BFMIdx > BFMIdxMax) {
+        BFMIdxMax = BFMIdx;
+    }
+    return BFMPos[BFMIdx];
+}
+int BFMR() {
+    local int rt;
+    BFMIdx--;
+    rt = FSeek(BFMPos[BFMIdx]);
+    return rt;
+}
+
+//struct offset32
+typedef struct {
+    uint32 value : 28;
+    uint32 checksum : 4; //should always be 5
+    local uint32 eval = offset32Eval(this);
+} offset32 <read=offset32Read, optimize=false>;
+string offset32Read( offset32 &obj )
+{
+    string s;
+    SPrintf(s, "0x%Xh", obj.eval );
+    return s;
+}
+uint32 offset32Eval (offset32 &obj) {
+    if (obj.checksum != 5) return 0; 
+    return obj.value;
+}
+//struct vector4
+typedef struct{
+    float X;
+    float Y;
+    float Z;
+    float W;
+}vector4 <read=vector4Read>;
+string vector4Read(vector4 &o) {
+    string s;
+    SPrintf(s, "X:% 5.2f,  Y:% 5.2f,  Z:% 5.2f,  W:% 5.2f", o.X, o.Y, o.Z, o.W);
+    return s;
+}
+//struct matrix44
+typedef struct
+{
+    float M[16];
+}matrix44<bgcolor=cLtRed>;
+
+typedef struct {
+    uint32 VTable;
+    uint32 BlockMapAddress;
+} PGBase;
+
+typedef struct {
+    uint32 VTable;
+} DATBase;
+
+
+typedef struct shader {
+    local int32 i;
+
+    PGBase base;
+    uint16 Unknown1;
+    byte Unknown2;
+    byte Unknown3;
+
+    uint16 Unknown4;
+    uint16 Unknown4_1;
+
+    uint32 Unknown5;
+
+    offset32 shaderParamOffsetsOffset;
+
+    uint32 Unknown6;
+    int32 ShaderParamCount;
+    uint32 Unknown8;
+
+    offset32 shaderParamTypesOffset;
+
+    uint32 Hash;
+    uint32 Unknown9;
+    uint32 Unknown10;
+
+    offset32 shaderParamNameOffset;
+
+    uint32 Unknown11;
+    uint32 Unknown12;
+    uint32 Unknown13;
+
+    // Data :
+    //using (new StreamContext(br))
+    //Remember current pos
+    BFMS();
+
+    BFSeek(shaderParamOffsetsOffset.eval);
+    struct {
+        offset32 ShaderParamOffset[ShaderParamCount];
+    } ShaderParamOffsets;
+
+    BFSeek(shaderParamTypesOffset.eval);
+    struct {
+        for (i = 0; i < ShaderParamCount; i++) {
+            byte ShaderParamType;
+        }
+    } ShaderParamTypes;
+
+    BFSeek(shaderParamNameOffset.eval);
+    struct {
+        for (i = 0; i < ShaderParamCount; i++) {
+            uint32 ShaderParamName;
+        }
+    } ShaderParamNames;
+
+
+
+    //read vector, texture data etc
+    struct {
+        BFMS();
+        for (i = 0; i < ShaderParamCount; i++) {
+            if (ShaderParamOffsets.ShaderParamOffset[i].eval != 0) {
+                BFSeek(ShaderParamOffsets.ShaderParamOffset[i].eval);
+                vector4 item;
+            }
+        }
+        BFMR();
+        FSkip(1);
+    } ParamObjectFactory_Creates<bgcolor=cLtRed>;
+    
+    //restore the position
+    BFMR();
+};
+
+//struct shaderFx
+typedef struct{
+    shader Base<bgcolor=cLtAqua>;
+    offset32 shaderNamePtr<bgcolor=cLtGreen>;
+    offset32 shaderSpsPtr<bgcolor=cLtGreen>;
+
+    uint32 Unknown14<bgcolor=cLtGreen>;
+    uint32 Unknown15<bgcolor=cLtGreen>;
+    uint32 Unknown16<bgcolor=cLtGreen>;
+    uint32 Unknown17<bgcolor=cLtGreen>;
+
+
+    //Remember current pos
+    BFMS();
+
+    // Data:
+    BFSeek( shaderNamePtr.eval);
+    string ShaderName<bgcolor=cLtGreen>;
+    BFSeek( shaderSpsPtr.eval);
+    string ShaderSPS<bgcolor=cLtGreen>;
+
+    //restore the position
+    BFMR();
+    
+} shaderFx<read=shaderFxRead>; 
+string shaderFxRead(shaderFx &obj) {
+    return obj.ShaderName;
+}
+
+typedef struct PtrC_shaderFX {
+    offset32 ptrListOffset;
+    uint16 Count;
+    uint16 Size;
+
+    
+    //local _items = new List<T>();
+    //using (new StreamContext(br))
+    //Remember current pos
+    BFMS();
+
+    BFSeek( ptrListOffset.eval);
+
+    
+    local int32 i;
+    struct {
+        offset32 itemOffset[Count];
+    } itemOffsets;
+    struct {
+        BFMS();
+        for (i = 0; i < Count; i++) {
+            BFSeek( itemOffsets.itemOffset[i].eval );
+            shaderFx shaderFxItem;
+        }
+        BFMR();
+        FSkip(1);
+    } shaderFxItems;
+
+    //restore the position
+    BFMR();
+
+};
+typedef struct shaderGroup
+{
+    DATBase Base;
+    offset32 TextureDictionaryOffset;
+
+    //CPtrCollection<T>
+    //Shaders = new PtrCollection<ShaderFx>(br);
+    PtrC_shaderFX Shaders;
+
+    uint32 Zeros[12];
+    uint32 VertexDeclarationUsageFlags;
+    uint32 Data3;
+};
+
+
+
+
+typedef struct subStruct
+{
+    DATBase base;
+    int32 Unknown1;
+    int32 Unknown2;
+};
+typedef struct boneIDMapping
+{
+    int16 ID;
+    int16 Index;
+};
+
+//struct ptrstring
+typedef struct
+{
+    offset32 offset;
+
+    BFMS();
+    BFSeek(offset.eval);
+    string value;
+    BFMR();
+} ptrstring <read=ptrstringRead>;
+string ptrstringRead(ptrstring &obj) {
+	return obj.value;
+}
+//struct bone
+typedef struct
+{
+    //Offset = br.BaseStream.Position;
+
+    ptrstring Name;
+    
+    int16 Unknown1;
+    int16 Unknown2;
+
+    offset32 NextSiblingOffset;
+    offset32 FirstChildOffset;
+    offset32 ParentOffset;
+
+    int16 BoneIndex;
+    int16 BoneID;
+    int16 BoneIndex2;
+    int16 Unknown3;
+
+    int32 Unknown4;
+
+    vector4 Position;
+    vector4 RotationEuler;
+    vector4 RotationQuaternion;
+    vector4 UnknownZeroVector1;
+
+    vector4 AbsolutePosition;
+    vector4 AbsoluteRotationEuler;
+
+    vector4 UnknownZeroVector2;
+    vector4 UnknownZeroVector3;
+    vector4 UnknownZeroVector4;
+
+    vector4 MinPI; // Minimum euler rotation maybe?
+    vector4 MaxPI; // Maximum euler rotation maybe?
+
+    vector4 UnknownAllZeros;
+
+} bone <read=boneRead>;
+string boneRead(bone &o) {
+    return o.Name.value;
+}
+typedef struct skeleton {
+    offset32 bonesOffset;
+    offset32 unknownIntsOffset;
+    offset32 transforms1Offset;
+    offset32 transforms2Offset;
+    offset32 transforms3Offset;
+
+    uint16 BoneCount;
+    int16 Unknown0;
+    int32 Unknown1;
+    int32 Unknown2;
+
+    boneIDMapping BoneIDMapping;
+    int32 Unknown3;
+    uint32 UnknownHash;
+    int32 Unknown4;
+
+    subStruct UnknownSubStruct;
+
+    BFMS();
+    // Data:
+    BFSeek(bonesOffset.eval);
+
+    local int32 i;
+    struct {
+        for (i = 0; i < BoneCount; i++) {
+            bone Bone;
+        }
+    } Bones;
+
+    BFSeek(unknownIntsOffset.eval);
+    int32 UnknownInts[BoneCount];
+
+    BFSeek(transforms1Offset.eval);
+    matrix44 Transforms1;
+
+    BFSeek(transforms2Offset.eval);
+    matrix44 Transforms2;
+
+    BFSeek(transforms3Offset.eval);
+    matrix44 Transforms3;
+
+    BFMR();
+};
+typedef struct vertexDeclaration {
+    uint32 UsageFlags;
+    uint16 Stride;
+    byte AlterateDecoder;
+    byte Type;
+
+    uint64 DeclarationTypes;
+};
+typedef struct vertexBuffer {
+    DATBase base;
+
+    uint16 VertexCount<bgcolor=cAqua>;
+    uint16 Unknown1;
+
+    offset32 DataOffset;
+    uint32 StrideSize;
+    offset32 vertexDeclOffset;
+    offset32 Unknown2;
+    offset32 DataOffset2;
+    offset32 p2Offset; // null
+
+    BFMS();
+    BFSeek(vertexDeclOffset.eval);
+    vertexDeclaration VertexDeclaration;
+    BFMR();
+
+};
+typedef struct indexBuffer {
+    DATBase base;
+
+    uint32 IndexCount<bgcolor=cAqua>;
+    offset32 DataOffset;
+    offset32 p1Offset;
+};
+//RageLib\Models\Resource\Models\Geometry.cs
+typedef struct geometry {
+    DATBase base;
+
+    uint32 Unknown1;
+    uint32 Unknown2;
+
+    offset32 vertexBuffersOffset;
+    uint32 Unknown3;
+    uint32 Unknown4;
+    uint32 Unknown5;
+
+    offset32 indexBuffersOffset;
+    uint32 Unknown6;
+    uint32 Unknown7;
+    uint32 Unknown8;
+
+    uint32 IndexCount<fgcolor=cRed>;
+    uint32 FaceCount<fgcolor=cGreen>;
+    uint16 VertexCount<fgcolor=cBlue>;
+    uint16 PrimitiveType;
+
+    uint32 Unknown9;
+
+    uint16 VertexStride;
+    uint16 Unknown10;
+
+    uint32 Unknown11;
+    uint32 Unknown12;
+    uint32 Unknown13;
+
+    BFMS();
+    // Data
+    BFSeek(vertexBuffersOffset.eval);
+    vertexBuffer VertexBuffer;
+
+    BFSeek(indexBuffersOffset.eval);
+    indexBuffer IndexBuffer;
+    BFMR();
+};
+
+typedef struct PtrC_geometry {
+    offset32 ptrListOffset;
+    uint16 Count;
+    uint16 Size;
+
+    
+    //local _items = new List<T>();
+    //using (new StreamContext(br))
+    //Remember current pos
+    BFMS();
+
+    BFSeek( ptrListOffset.eval);
+
+    
+    local int32 i;
+    struct {
+        offset32 itemOffset[Count];
+    } itemOffsets;
+    struct {
+        BFMS();
+        for (i = 0; i < Count; i++) {
+            BFSeek( itemOffsets.itemOffset[i].eval );
+            geometry Geometry;
+        }
+        BFMR();
+        FSkip(1);
+    } Geometries;
+
+    //restore the position
+    BFMR();
+};
+
+
+typedef struct model {
+    DATBase base;
+
+    PtrC_geometry Geometries;
+
+    offset32 unknownVectorOffsets;
+    offset32 materialMappingOffset;
+
+    uint16 Unknown1;
+    uint16 Unknown2;
+    uint16 Unknown3;
+    uint16 Unknown4;
+
+
+    BFMS();
+    BFSeek(unknownVectorOffsets.eval);
+    vector4 UnknownVectors[4];
+
+    BFSeek(materialMappingOffset.eval);
+    uint16 ShaderMappings[Geometries.Count];
+    BFMR();
+};
+
+typedef struct PtrC_model {
+    offset32 ptrListOffset;
+    uint16 Count;
+    uint16 Size;
+    
+    //Remember current pos
+    BFMS();
+
+    BFSeek( ptrListOffset.eval);
+
+    
+    local int32 i;
+    struct {
+        offset32 itemOffset[Count];
+    } itemOffsets;
+    struct {
+        BFMS();
+        for (i = 0; i < Count; i++) {
+            BFSeek( itemOffsets.itemOffset[i].eval );
+            model Model;
+        }
+        BFMR();
+        FSkip(1);
+    } Models;
+
+    //restore the position
+    BFMR();
+};
+
+//drawable
+typedef struct
+{
+
+    PGBase Base;
+
+    offset32 shaderGroupOffset;
+    offset32 skeletonOffset;
+
+    vector4 Center;
+    vector4 BoundsMin;
+    vector4 BoundsMax;
+
+    //modelOffsets;
+    typedef struct {
+        offset32 modelOffset[4];
+    } modelOffsets <read=modelOffsetsRead>;
+    modelOffsets ModelOffsets;
+    local uint32 levelOfDetailCount = modelOffsetCount(ModelOffsets);
+
+
+    vector4 AbsoluteMax;
+
+    uint32 Unk1;
+
+    uint32 Neg1;
+    uint32 Neg2;
+    uint32 Neg3;
+    
+    float Unk2;
+    
+    uint32 Unk3;
+    uint32 Unk4;
+    uint32 Unk5;
+    
+    // Collection<LightAttrs>
+    uint32 Unk6;
+    uint32 Unk7;
+
+    
+    // The data follows:
+    BFMS();
+    if (shaderGroupOffset.eval != 0)
+    {
+        BFSeek( shaderGroupOffset.eval);
+        shaderGroup ShaderGroup;
+    }
+
+    if (skeletonOffset.eval != 0)
+    {
+        BFSeek( skeletonOffset.eval);
+        skeleton Skeleton;
+    }
+
+    local int32 i;
+    struct {
+        BFMS();
+        for (i = 0; i < levelOfDetailCount; i++)
+        {
+            BFSeek(ModelOffsets.modelOffset[i].eval);
+            PtrC_model ModelCollection;
+        }
+        //Printf("LODS=%d", levelOfDetailCount);
+        BFMR();
+        FSkip(1);
+    }ModelCollections;
+    BFMR();
+} drawable;
+string modelOffsetsRead(modelOffsets &obj) {
+    string s;
+    SPrintf(s, "LOD Models= %d", modelOffsetCount(obj) );
+    return s;
+}
+uint32 modelOffsetCount(modelOffsets &obj) {
+    local uint32 modelOffsetCount = 0;
+    local uint32 i;
+    for (i = 0; i < 4; i++) {
+        if (obj.modelOffset[i].eval != 0) {
+            modelOffsetCount++;
+        }
+    }
+    return modelOffsetCount;
+}
+typedef struct {
+    FSkip(0x90);
+    offset32 offset;
+    BFMS();
+    if (offset.eval != 0)
+    {
+        BFSeek(offset.eval);
+        drawable Drawable;
+    }
+    BFMR();
+}fragTypeChild<read=fragTypeChildRead>;
+string fragTypeChildRead(fragTypeChild &o) {
+    string s;
+    SPrintf(s, "LOD Models= %d", modelOffsetCount(o.Drawable.ModelOffsets) );
+    return s;
+};
+
+
+//systemMemData
+typedef struct {
+    local int32 i;
+
+    BFSeek(0xB4);
+    //'admiral'=107520=1A400
+    offset32 offset<bgcolor=cLtGreen>;
+    BFSeek( offset.eval );
+    drawable Drawable;
+
+    BFSeek(0x1F3);
+    byte childCount;
+
+    BFSeek(0xD4);
+    offset32 childListOffset;
+
+    BFSeek(childListOffset.eval);
+    struct {
+        offset32 childOffset[childCount];
+    } childOffsets;
+
+    struct {
+        BFMS();
+        for(i=0;i<childCount; i++)
+        {
+            BFSeek(childOffsets.childOffset[i].eval);
+            fragTypeChild Children;
+        }
+        BFMR();
+        FSkip(1);
+    }FragTypeChilds;
+/* Seems hard to do this
+    foreach (var child in Children)
+    {
+        if (child.Drawable != null)
+        {
+            child.Drawable.ShaderGroup = Drawable.ShaderGroup;
+        }
+    }
+*/
+    BFSeek(systemMemDataSizeCalc()-0x100);
+    DWORD ZM2LockId<bgcolor=cRed, format=hex>;
+    
+    
+//Printf("BFMIdxMax=%d", BFMIdxMax);
+
+} systemMemData <size=systemMemDataSize>;
+int systemMemDataSize(systemMemData &r)
+{
+ return systemMemDataSizeCalc();
+}
+int systemMemDataSizeCalc()
+{
+ return Header.flags.SystemMemSize << (Header.flags.SystemMemSizeShift + 8);
+}
+
+
+/*
+            br.BaseStream.Seek(DataOffset, SeekOrigin.Begin);
+            RawData = br.ReadBytes((int)(IndexCount * 2));
+*/
+//RageLib\Models\Resource\DrawableModel.cs:ReadData();
+typedef struct Drawable_ReadData {
+    //local uint32 i,j,k;
+    //local ModelCollection = SystemMemData.Drawable.ModelCollection;
+    //local graphicsMemData ModelCollection = parentof(this);
+    //local graphicsMemData ModelCollection = parentof(this);
+    //for (i=0, exists(ModelCollection[i]), i++){
+    //    uint32 test123;
+    //}
+/*
+    foreach (var geometryInfo in ModelCollection)
+    {
+        foreach (var info in geometryInfo)
+        {
+            foreach (var dataInfo in info.Geometries) //dataInfo=stuct geometry
+            {
+                dataInfo.VertexBuffer.ReadData(br);
+                dataInfo.IndexBuffer.ReadData(br);
+            }                    
+        }
+    }
+*/
+};
+
+//graphicsMemData
+//RageLib\Models\Resource\FragTypeModel.cs:ReadData()
+typedef struct {
+    Drawable_ReadData ReadData;
+/*
+    foreach (var child in Children)
+    {
+        if (child.Drawable != null)
+        {
+            child.Drawable.ReadData(br);
+        }
+    }
+*/
+    FSkip(1);
+} graphicsMemData <size=size_graphicsMemData>;
+int size_graphicsMemData(graphicsMemData)
+{
+ return Header.flags.GraphicsMemSize << (Header.flags.GraphicsMemSizeShift + 8);
+}
+
+
+//Maybe the 2 bytes compress type was removed after decompress
+Begin = FTell() -2; 
+systemMemData SystemMemData;
+graphicsMemData GraphicsMemData;
+
